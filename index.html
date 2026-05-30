@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adventure Gem Quest</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: Arial, sans-serif;
+        }
+
+        #gameContainer {
+            position: relative;
+            background: #1a1a1a;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%);
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 5px;
+        }
+
+        #levelInfo {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 5px;
+        }
+
+        #levelComplete {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px 50px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 200;
+            display: none;
+        }
+
+        #levelComplete h2 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: #FFD700;
+        }
+
+        #levelComplete p {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        #levelComplete button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        #levelComplete button:hover {
+            background: #764ba2;
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px 50px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 200;
+            display: none;
+        }
+
+        #gameOver h2 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: #FF6B6B;
+        }
+
+        #gameOver button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        #gameOver button:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="1000" height="600"></canvas>
+        <div id="ui">
+            <div id="levelInfo">Level 1</div>
+            <div id="gemsCollected">Gems: 0/5</div>
+            <div id="health">❤️ Health: 3</div>
+        </div>
+        <div id="controls">
+            <div><strong>Controls:</strong></div>
+            <div>W/A/S/D - Move | SPACE - Jump | X - Wall Stick</div>
+            <div>Collect all gems to complete the level!</div>
+        </div>
+        <div id="levelComplete">
+            <h2>Level Complete! 🎉</h2>
+            <p id="levelStats"></p>
+            <button onclick="nextLevel()">Next Level</button>
+        </div>
+        <div id="gameOver">
+            <h2>Game Over! 💀</h2>
+            <p id="gameOverStats"></p>
+            <button onclick="restartGame()">Try Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game States
+        let gameState = {
+            currentLevel: 1,
+            gemsCollected: 0,
+            health: 3,
+            score: 0,
+            levelComplete: false,
+            gameOver: false
+        };
+
+        // Player Object
+        const player = {
+            x: 50,
+            y: 300,
+            width: 30,
+            height: 40,
+            velocityX: 0,
+            velocityY: 0,
+            isJumping: false,
+            isWallSticking: false,
+            direction: 1, // 1 for right, -1 for left
+            speed: 5,
+            jumpPower: 12,
+            gravity: 0.6
+        };
+
+        // Input Handler
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key === ' ') e.preventDefault();
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        // Level Data
+        const levels = [
+            // Level 1: Introduction
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 1000, height: 50, type: 'normal' },
+                    { x: 200, y: 480, width: 150, height: 20, type: 'normal' },
+                    { x: 500, y: 420, width: 150, height: 20, type: 'normal' },
+                    { x: 800, y: 360, width: 150, height: 20, type: 'normal' }
+                ],
+                gems: [
+                    { x: 225, y: 450, collected: false },
+                    { x: 525, y: 390, collected: false },
+                    { x: 825, y: 330, collected: false },
+                    { x: 100, y: 510, collected: false },
+                    { x: 900, y: 510, collected: false }
+                ],
+                spikes: [],
+                boxes: [],
+                enemies: [],
+                wallAreas: []
+            },
+            // Level 2: Wall Mechanics
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 300, height: 50, type: 'normal' },
+                    { x: 700, y: 550, width: 300, height: 50, type: 'normal' },
+                    { x: 350, y: 400, width: 300, height: 20, type: 'normal' }
+                ],
+                gems: [
+                    { x: 375, y: 370, collected: false },
+                    { x: 325, y: 370, collected: false },
+                    { x: 425, y: 370, collected: false },
+                    { x: 150, y: 510, collected: false },
+                    { x: 850, y: 510, collected: false }
+                ],
+                spikes: [],
+                boxes: [],
+                enemies: [],
+                wallAreas: [
+                    { x: 320, y: 200, width: 30, height: 200, type: 'safe' },
+                    { x: 650, y: 200, width: 30, height: 200, type: 'safe' }
+                ]
+            },
+            // Level 3: Puzzles & Spikes
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 200, height: 50, type: 'normal' },
+                    { x: 350, y: 500, width: 300, height: 20, type: 'normal' },
+                    { x: 800, y: 550, width: 200, height: 50, type: 'normal' }
+                ],
+                gems: [
+                    { x: 475, y: 470, collected: false },
+                    { x: 425, y: 470, collected: false },
+                    { x: 525, y: 470, collected: false },
+                    { x: 100, y: 510, collected: false },
+                    { x: 900, y: 510, collected: false }
+                ],
+                spikes: [
+                    { x: 200, y: 530, width: 150, height: 20 },
+                    { x: 650, y: 530, width: 150, height: 20 }
+                ],
+                boxes: [
+                    { x: 200, y: 400, width: 40, height: 40, pushed: false }
+                ],
+                enemies: [],
+                wallAreas: []
+            },
+            // Level 4: Enemies & Complex Jumps
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 150, height: 50, type: 'normal' },
+                    { x: 200, y: 480, width: 120, height: 20, type: 'normal' },
+                    { x: 400, y: 400, width: 120, height: 20, type: 'normal' },
+                    { x: 600, y: 320, width: 120, height: 20, type: 'normal' },
+                    { x: 800, y: 240, width: 150, height: 20, type: 'normal' },
+                    { x: 850, y: 550, width: 150, height: 50, type: 'normal' }
+                ],
+                gems: [
+                    { x: 225, y: 450, collected: false },
+                    { x: 425, y: 370, collected: false },
+                    { x: 625, y: 290, collected: false },
+                    { x: 825, y: 210, collected: false },
+                    { x: 75, y: 510, collected: false }
+                ],
+                spikes: [
+                    { x: 150, y: 530, width: 50, height: 20 },
+                    { x: 350, y: 530, width: 50, height: 20 }
+                ],
+                boxes: [],
+                enemies: [
+                    { x: 300, y: 500, width: 30, height: 30, dirX: 1, speed: 2 }
+                ],
+                wallAreas: []
+            },
+            // Level 5: Final Challenge
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 100, height: 50, type: 'normal' },
+                    { x: 200, y: 480, width: 80, height: 20, type: 'normal' },
+                    { x: 350, y: 380, width: 80, height: 20, type: 'normal' },
+                    { x: 500, y: 300, width: 80, height: 20, type: 'normal' },
+                    { x: 650, y: 220, width: 80, height: 20, type: 'normal' },
+                    { x: 900, y: 550, width: 100, height: 50, type: 'normal' }
+                ],
+                gems: [
+                    { x: 225, y: 450, collected: false },
+                    { x: 375, y: 350, collected: false },
+                    { x: 525, y: 270, collected: false },
+                    { x: 675, y: 190, collected: false },
+                    { x: 500, y: 550, collected: false }
+                ],
+                spikes: [
+                    { x: 100, y: 530, width: 100, height: 20 },
+                    { x: 300, y: 530, width: 50, height: 20 },
+                    { x: 450, y: 530, width: 50, height: 20 },
+                    { x: 600, y: 530, width: 300, height: 20 }
+                ],
+                boxes: [
+                    { x: 250, y: 400, width: 40, height: 40, pushed: false }
+                ],
+                enemies: [
+                    { x: 400, y: 420, width: 30, height: 30, dirX: 1, speed: 2 },
+                    { x: 700, y: 340, width: 30, height: 30, dirX: 1, speed: 2 }
+                ],
+                wallAreas: [
+                    { x: 150, y: 300, width: 30, height: 250, type: 'safe' }
+                ]
+            }
+        ];
+
+        let currentLevelData = levels[0];
+
+        // Collision Detection
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // Update Player
+        function updatePlayer() {
+            // Movement
+            player.velocityX = 0;
+            if (keys['a'] || keys['arrowleft']) {
+                player.velocityX = -player.speed;
+                player.direction = -1;
+            }
+            if (keys['d'] || keys['arrowright']) {
+                player.velocityX = player.speed;
+                player.direction = 1;
+            }
+
+            // Jump
+            if ((keys[' '] || keys['w']) && !player.isJumping) {
+                player.velocityY = -player.jumpPower;
+                player.isJumping = true;
+            }
+
+            // Wall Stick
+            if (keys['x']) {
+                // Check for wall areas
+                for (let wall of currentLevelData.wallAreas) {
+                    if (checkCollision(player, wall) && wall.type === 'safe') {
+                        player.isWallSticking = true;
+                        player.velocityY = 1; // Slow descent
+                        break;
+                    }
+                }
+            } else {
+                player.isWallSticking = false;
+            }
+
+            // Apply gravity
+            if (!player.isWallSticking) {
+                player.velocityY += player.gravity;
+            }
+
+            // Update position
+            player.x += player.velocityX;
+            player.y += player.velocityY;
+
+            // Platform collision
+            let onGround = false;
+            for (let platform of currentLevelData.platforms) {
+                if (checkCollision(player, platform)) {
+                    if (player.velocityY > 0 && player.y + player.height - player.velocityY <= platform.y + 5) {
+                        player.y = platform.y - player.height;
+                        player.velocityY = 0;
+                        player.isJumping = false;
+                        onGround = true;
+                    }
+                }
+            }
+
+            // Box collision
+            for (let box of currentLevelData.boxes) {
+                if (checkCollision(player, box)) {
+                    if (player.velocityY > 0 && player.y + player.height - player.velocityY <= box.y + 5) {
+                        player.y = box.y - player.height;
+                        player.velocityY = 0;
+                        player.isJumping = false;
+                        onGround = true;
+                    }
+                }
+            }
+
+            // Bounds
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            if (player.y > canvas.height) {
+                takeDamage();
+            }
+
+            // Spike collision
+            for (let spike of currentLevelData.spikes) {
+                if (checkCollision(player, spike)) {
+                    takeDamage();
+                }
+            }
+
+            // Enemy collision
+            for (let enemy of currentLevelData.enemies) {
+                if (checkCollision(player, enemy)) {
+                    takeDamage();
+                }
+            }
+
+            // Gem collection
+            for (let gem of currentLevelData.gems) {
+                if (!gem.collected && checkCollision(player, gem)) {
+                    gem.collected = true;
+                    gameState.gemsCollected++;
+                    gameState.score += 100;
+                }
+            }
+        }
+
+        // Take Damage
+        function takeDamage() {
+            gameState.health--;
+            if (gameState.health <= 0) {
+                gameState.gameOver = true;
+                document.getElementById('gameOverStats').innerHTML = `
+                    Level: ${gameState.currentLevel}<br>
+                    Gems Collected: ${gameState.gemsCollected}<br>
+                    Score: ${gameState.score}
+                `;
+                document.getElementById('gameOver').style.display = 'block';
+            }
+            // Reset player
+            player.x = 50;
+            player.y = 300;
+            player.velocityX = 0;
+            player.velocityY = 0;
+        }
+
+        // Update Enemies
+        function updateEnemies() {
+            for (let enemy of currentLevelData.enemies) {
+                enemy.x += enemy.dirX * enemy.speed;
+                
+                // Boundary check
+                if (enemy.x < 0 || enemy.x + enemy.width > canvas.width) {
+                    enemy.dirX *= -1;
+                }
+            }
+        }
+
+        // Update Boxes
+        function updateBoxes() {
+            for (let box of currentLevelData.boxes) {
+                // Simple box physics
+                let onGround = false;
+                for (let platform of currentLevelData.platforms) {
+                    if (checkCollision(box, platform)) {
+                        box.y = platform.y - box.height;
+                        onGround = true;
+                    }
+                }
+                if (!onGround) {
+                    box.y += 2;
+                }
+            }
+        }
+
+        // Check Level Complete
+        function checkLevelComplete() {
+            const totalGems = currentLevelData.gems.length;
+            if (gameState.gemsCollected >= totalGems && !gameState.levelComplete) {
+                gameState.levelComplete = true;
+                document.getElementById('levelStats').innerHTML = `
+                    All gems collected!<br>
+                    Health Remaining: ${gameState.health}<br>
+                    Score: ${gameState.score}
+                `;
+                document.getElementById('levelComplete').style.display = 'block';
+            }
+        }
+
+        // Draw Functions
+        function drawPlayer() {
+            ctx.fillStyle = player.isWallSticking ? '#FF6B9D' : '#4A90E2';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Eyes
+            ctx.fillStyle = 'white';
+            ctx.fillRect(player.x + 8, player.y + 10, 6, 6);
+            ctx.fillRect(player.x + 16, player.y + 10, 6, 6);
+        }
+
+        function drawPlatforms() {
+            for (let platform of currentLevelData.platforms) {
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                
+                // Outline
+                ctx.strokeStyle = '#654321';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(platform.x, platform.y, platform.width, platform.height);
+            }
+        }
+
+        function drawGems() {
+            for (let gem of currentLevelData.gems) {
+                if (!gem.collected) {
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.moveTo(gem.x, gem.y - 10);
+                    ctx.lineTo(gem.x + 10, gem.y - 5);
+                    ctx.lineTo(gem.x + 10, gem.y + 5);
+                    ctx.lineTo(gem.x, gem.y + 10);
+                    ctx.lineTo(gem.x - 10, gem.y + 5);
+                    ctx.lineTo(gem.x - 10, gem.y - 5);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.strokeStyle = '#FFA500';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function drawSpikes() {
+            for (let spike of currentLevelData.spikes) {
+                ctx.fillStyle = '#FF0000';
+                for (let i = 0; i < spike.width; i += 20) {
+                    ctx.beginPath();
+                    ctx.moveTo(spike.x + i, spike.y + spike.height);
+                    ctx.lineTo(spike.x + i + 10, spike.y);
+                    ctx.lineTo(spike.x + i + 20, spike.y + spike.height);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+        }
+
+        function drawBoxes() {
+            for (let box of currentLevelData.boxes) {
+                ctx.fillStyle = '#D2691E';
+                ctx.fillRect(box.x, box.y, box.width, box.height);
+                ctx.strokeStyle = '#8B4513';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(box.x, box.y, box.width, box.height);
+                
+                // Pattern
+                for (let i = 0; i < box.width; i += 8) {
+                    ctx.strokeRect(box.x + i, box.y, 8, box.height);
+                }
+            }
+        }
+
+        function drawEnemies() {
+            for (let enemy of currentLevelData.enemies) {
+                ctx.fillStyle = '#E74C3C';
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                
+                // Eyes
+                ctx.fillStyle = 'white';
+                ctx.fillRect(enemy.x + 5, enemy.y + 5, 6, 6);
+                ctx.fillRect(enemy.x + 19, enemy.y + 5, 6, 6);
+                
+                ctx.fillStyle = 'black';
+                ctx.fillRect(enemy.x + 6, enemy.y + 6, 4, 4);
+                ctx.fillRect(enemy.x + 20, enemy.y + 6, 4, 4);
+            }
+        }
+
+        function drawWallAreas() {
+            for (let wall of currentLevelData.wallAreas) {
+                if (wall.type === 'safe') {
+                    ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
+                    ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
+                    ctx.strokeStyle = '#4CAF50';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(wall.x, wall.y, wall.width, wall.height);
+                }
+            }
+        }
+
+        function updateUI() {
+            const totalGems = currentLevelData.gems.length;
+            document.getElementById('gemsCollected').textContent = `Gems: ${gameState.gemsCollected}/${totalGems}`;
+            document.getElementById('health').textContent = `❤️ Health: ${gameState.health}`;
+            document.getElementById('levelInfo').textContent = `Level ${gameState.currentLevel}`;
+        }
+
+        // Game Loop
+        function gameLoop() {
+            if (!gameState.gameOver && !gameState.levelComplete) {
+                // Clear canvas
+                ctx.fillStyle = 'rgba(135, 206, 235, 0.8)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Update
+                updatePlayer();
+                updateEnemies();
+                updateBoxes();
+                checkLevelComplete();
+
+                // Draw
+                drawWallAreas();
+                drawPlatforms();
+                drawSpikes();
+                drawBoxes();
+                drawEnemies();
+                drawGems();
+                drawPlayer();
+
+                // Update UI
+                updateUI();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Global Functions
+        window.nextLevel = function() {
+            gameState.currentLevel++;
+            if (gameState.currentLevel > levels.length) {
+                alert(`🎉 You completed all ${levels.length} levels! Final Score: ${gameState.score}`);
+                restartGame();
+                return;
+            }
+            
+            currentLevelData = JSON.parse(JSON.stringify(levels[gameState.currentLevel - 1]));
+            gameState.levelComplete = false;
+            gameState.gemsCollected = 0;
+            player.x = 50;
+            player.y = 300;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            document.getElementById('levelComplete').style.display = 'none';
+        };
+
+        window.restartGame = function() {
+            gameState = {
+                currentLevel: 1,
+                gemsCollected: 0,
+                health: 3,
+                score: 0,
+                levelComplete: false,
+                gameOver: false
+            };
+            currentLevelData = JSON.parse(JSON.stringify(levels[0]));
+            player.x = 50;
+            player.y = 300;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('levelComplete').style.display = 'none';
+        };
+
+        // Start Game
+        gameLoop();
+    </script>
+</body>
+</html>
