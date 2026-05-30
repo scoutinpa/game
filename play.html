@@ -323,6 +323,26 @@
                     passThrough: false 
                 });
 
+                // Left boundary wall
+                levelData.platforms.push({
+                    x: -50,
+                    y: 0,
+                    width: 50,
+                    height: levelData.levelHeight,
+                    type: 'wall',
+                    passThrough: false
+                });
+
+                // Right boundary wall
+                levelData.platforms.push({
+                    x: levelData.levelWidth,
+                    y: 0,
+                    width: 50,
+                    height: levelData.levelHeight,
+                    type: 'wall',
+                    passThrough: false
+                });
+
                 // Generate level layout based on difficulty
                 let currentX = 250;
                 const platformSpacing = 300 + (difficulty * 50);
@@ -464,23 +484,33 @@
             player.x += player.velocityX;
             player.y += player.velocityY;
 
-            // Bounds
-            if (player.x < 0) player.x = 0;
-            if (player.x + player.width > currentLevelData.levelWidth) player.x = currentLevelData.levelWidth - player.width;
-
-            // Platform collision
+            // Platform collision (including boundary walls)
             for (let platform of currentLevelData.platforms) {
                 if (checkCollision(player, platform)) {
-                    // Coming from above
-                    if (player.velocityY > 0 && player.y + player.height - player.velocityY <= platform.y + 5) {
-                        player.y = platform.y - player.height;
-                        player.velocityY = 0;
-                        player.isJumping = false;
+                    // Boundary walls - stop player from going out of bounds
+                    if (platform.type === 'wall') {
+                        if (player.velocityX > 0) {
+                            // Hit right wall
+                            player.x = platform.x - player.width;
+                        } else if (player.velocityX < 0) {
+                            // Hit left wall
+                            player.x = platform.x + platform.width;
+                        }
+                        player.velocityX = 0;
                     }
-                    // Coming from below
-                    else if (player.velocityY < 0 && !platform.passThrough && player.y + player.height - player.velocityY >= platform.y + platform.height - 5) {
-                        player.y = platform.y + platform.height;
-                        player.velocityY = 0;
+                    // Regular platforms
+                    else {
+                        // Coming from above
+                        if (player.velocityY > 0 && player.y + player.height - player.velocityY <= platform.y + 5) {
+                            player.y = platform.y - player.height;
+                            player.velocityY = 0;
+                            player.isJumping = false;
+                        }
+                        // Coming from below
+                        else if (player.velocityY < 0 && !platform.passThrough && player.y + player.height - player.velocityY >= platform.y + platform.height - 5) {
+                            player.y = platform.y + platform.height;
+                            player.velocityY = 0;
+                        }
                     }
                 }
             }
@@ -595,6 +625,11 @@
         function drawPlatforms() {
             for (let platform of currentLevelData.platforms) {
                 const screenX = platform.x - gameState.cameraX;
+                
+                // Skip drawing boundary walls (they're invisible)
+                if (platform.type === 'wall') {
+                    continue;
+                }
                 
                 if (screenX + platform.width > 0 && screenX < canvas.width) {
                     // Gradient
